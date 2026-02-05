@@ -1,0 +1,249 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô phỏng Pin Galvani</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM UMD (Dùng link trực tiếp để chạy được trên file://) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    
+    <style>
+        @keyframes floatIon {
+          0%, 100% { transform: translate(0, 0) rotate(0deg); }
+          25% { transform: translate(5px, 5px) rotate(5deg); }
+          50% { transform: translate(-5px, 10px) rotate(-5deg); }
+          75% { transform: translate(-8px, -5px) rotate(3deg); }
+        }
+        @keyframes bubble {
+          0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+          20% { opacity: 1; }
+          100% { transform: translate(0, -100px) scale(1.1); opacity: 0; }
+        }
+        @keyframes deposit {
+          0% { transform: translate(0, 50px) scale(1.2); opacity: 0; }
+          30% { opacity: 1; }
+          100% { transform: translate(0, 0) scale(0.8); opacity: 0; }
+        }
+        .animate-float-ion { animation: floatIon infinite ease-in-out; }
+        .animate-bubble { animation: bubble 2.5s infinite ease-out; }
+        .animate-deposit { animation: deposit 3s infinite ease-in; }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(40px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "@google/genai": "https://esm.sh/@google/genai@^1.39.0"
+  }
+}
+</script>
+</head>
+<body class="bg-slate-100 text-slate-900 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- COMPONENTS ---
+
+        const Beaker = ({ metal, solution, color, metalColor, mass, isActive }) => {
+            const originalWidth = 28;
+            const liquidHeightPercent = 80;
+            const znWetWidth = Math.max(6, originalWidth * (mass / 100));
+            const cuWetWidth = originalWidth + (100 - mass) / 2;
+
+            const ions = useMemo(() => {
+                const ionList = [];
+                const ionTypes = metal === 'Zn' ? ['Zn²⁺', 'SO₄²⁻'] : ['Cu²⁺', 'SO₄²⁻'];
+                for (let i = 0; i < 12; i++) {
+                    ionList.push({
+                        id: i,
+                        type: ionTypes[i % 2],
+                        x: 10 + Math.random() * 80,
+                        y: 20 + Math.random() * 60,
+                        delay: Math.random() * 5,
+                        duration: 3 + Math.random() * 4,
+                        size: i % 2 === 0 ? 'w-8 h-8' : 'w-10 h-10',
+                        color: i % 2 === 0 
+                            ? (metal === 'Zn' ? 'bg-blue-200 text-blue-800' : 'bg-orange-300 text-orange-900') 
+                            : 'bg-indigo-100 text-indigo-800'
+                    });
+                }
+                return ionList;
+            }, [metal]);
+
+            return (
+                <div className="relative flex flex-col items-center">
+                    <div className="relative w-64 h-80 border-[10px] border-slate-300 rounded-b-[5rem] border-t-0 bg-white/20 overflow-hidden shadow-2xl">
+                        <div className={`absolute bottom-0 w-full transition-all duration-1000 ${color} opacity-40`} style={{ height: `${liquidHeightPercent}%` }}>
+                            {ions.map((ion) => (
+                                <div key={ion.id} className={`absolute rounded-full flex items-center justify-center font-black text-[8px] shadow-sm border border-white/30 animate-float-ion ${ion.color} ${ion.size}`}
+                                     style={{ left: `${ion.x}%`, top: `${ion.y}%`, animationDelay: `${ion.delay}s`, animationDuration: `${ion.duration}s` }}>
+                                    {ion.type}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full flex flex-col items-center pointer-events-none">
+                            <div className={`transition-all duration-500 ${metalColor} shadow-md border-x border-black/10`} style={{ width: `${originalWidth}px`, height: `${100 - liquidHeightPercent}%` }}></div>
+                            <div className={`relative transition-all duration-500 flex flex-col items-center ${metalColor} shadow-lg`}
+                                 style={{ width: `${metal === 'Zn' ? znWetWidth : cuWetWidth}px`, height: `${liquidHeightPercent}%`, borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
+                                <div className="mt-10 text-xs font-black text-white/90 drop-shadow-lg">{metal}</div>
+                                <div className="absolute top-0 w-full h-[3px] bg-black/20"></div>
+                            </div>
+                        </div>
+                        {isActive && (
+                            <div className="absolute inset-0 pointer-events-none">
+                                {[...Array(4)].map((_, i) => (
+                                    <div key={i} className={`absolute w-7 h-7 ${metal === 'Zn' ? 'bg-blue-200 text-blue-900 animate-bubble' : 'bg-orange-300 text-orange-950 animate-deposit'} rounded-full flex items-center justify-center font-black text-[7px] border border-white shadow-lg`}
+                                         style={{ left: `${30 + Math.random() * 40}%`, top: `${40 + Math.random() * 40}%`, animationDelay: `${i * 0.5}s` }}>
+                                        {metal === 'Zn' ? 'Zn²⁺' : 'Cu²⁺'}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="mt-6 px-6 py-2 bg-white rounded-2xl border-2 border-slate-100 text-lg font-black text-slate-700 shadow-md">Dung dịch {solution}</div>
+                </div>
+            );
+        };
+
+        const Circuit = ({ isSwitchOn, isSaltBridgeIn, isGlowing }) => {
+            const saltBridgeY = isSaltBridgeIn ? 480 : 120;
+            const wirePlugY = 280;
+            return (
+                <div className="absolute inset-0 pointer-events-none z-10">
+                    <svg className="w-full h-full" viewBox="0 0 800 650" preserveAspectRatio="xMidYMid meet">
+                        {/* Dây dẫn cắm sâu trực tiếp vào kim loại */}
+                        <path d={`M 200 ${wirePlugY} L 200 80 L 600 80 L 600 ${wirePlugY}`} fill="none" stroke="#0f172a" strokeWidth="8" strokeLinecap="round" />
+                        <g className="transition-all duration-1000">
+                            <path d={`M 315 ${saltBridgeY} L 315 170 L 485 170 L 485 ${saltBridgeY}`} fill="none" stroke="#f8fafc" strokeWidth="36" strokeLinecap="round" className="drop-shadow-2xl" />
+                            <path d={`M 315 ${saltBridgeY} L 315 170 L 485 170 L 485 ${saltBridgeY}`} fill="none" stroke="#cbd5e1" strokeWidth="26" strokeLinecap="round" opacity="0.5" />
+                            <text x="400" y="155" textAnchor="middle" className="text-[12px] fill-slate-500 font-black uppercase">CẦU MUỐI (Na2SO4)</text>
+                        </g>
+                        <g transform="translate(400, 80)">
+                            <rect x="-24" y="-6" width="48" height="24" rx="5" fill="#1e293b" />
+                            {isGlowing && <circle cx="0" cy="-40" r="80" fill="#fbbf24" className="blur-3xl animate-pulse" opacity="0.4" />}
+                            <circle cx="0" cy="-40" r="32" fill={isGlowing ? "#fbbf24" : "#e2e8f0"} stroke={isGlowing ? "#d97706" : "#cbd5e1"} strokeWidth="3" />
+                            <path d="M -12 -25 Q 0 -60 12 -25" fill="none" stroke={isGlowing ? "#92400e" : "#94a3b8"} strokeWidth="5" strokeLinecap="round" />
+                        </g>
+                        {isGlowing && [0,1,2,3].map(i => (
+                            <circle key={i} r="8" fill="#3b82f6">
+                                <animateMotion path={`M 200 ${wirePlugY} L 200 80 L 600 80 L 600 ${wirePlugY}`} dur="2s" begin={`${i * 0.5}s`} repeatCount="indefinite" />
+                            </circle>
+                        ))}
+                    </svg>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+
+        const App = () => {
+            const [isSwitchOn, setIsSwitchOn] = useState(false);
+            const [isSaltBridgeIn, setIsSaltBridgeIn] = useState(false);
+            const [znMass, setZnMass] = useState(100);
+            const [cuMass, setCuMass] = useState(100);
+
+            const isGlowing = isSwitchOn && isSaltBridgeIn;
+
+            useEffect(() => {
+                let interval;
+                if (isGlowing) {
+                    interval = setInterval(() => {
+                        setZnMass(p => Math.max(p - 0.04, 10));
+                        setCuMass(p => Math.max(p - 0.06, 0));
+                    }, 100);
+                }
+                return () => clearInterval(interval);
+            }, [isGlowing]);
+
+            const handleReset = () => {
+                setIsSwitchOn(false);
+                setIsSaltBridgeIn(false);
+                setZnMass(100);
+                setCuMass(100);
+            };
+
+            return (
+                <div className="min-h-screen p-8 flex flex-col items-center">
+                    <header className="mb-12 text-center animate-fade-in">
+                        <h1 className="text-6xl font-black text-slate-900 uppercase">PIN GALVANI</h1>
+                        <div className="h-2 w-48 bg-indigo-600 mx-auto mt-2 rounded-full"></div>
+                    </header>
+
+                    <div className="w-full max-w-[1600px] grid lg:grid-cols-4 gap-8">
+                        {/* Hiện tượng & Điều khiển */}
+                        <div className="space-y-6">
+                            <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border-t-8 border-indigo-600">
+                                <h3 className="font-black text-xl mb-4">🔍 Hiện tượng</h3>
+                                <ul className="space-y-3 font-black text-sm">
+                                    <li className={`p-4 rounded-xl ${isGlowing ? 'bg-amber-50' : 'bg-slate-50 opacity-40'}`}>ĐÈN SÁNG</li>
+                                    <li className={`p-4 rounded-xl ${isGlowing && znMass < 99 ? 'bg-blue-50' : 'bg-slate-50 opacity-40'}`}>THANH Zn TAN TỪ TỪ</li>
+                                    <li className={`p-4 rounded-xl ${isGlowing && cuMass < 99 ? 'bg-orange-50' : 'bg-slate-50 opacity-40'}`}>THANH Cu CÓ ĐỒNG BÁM VÀO</li>
+                                </ul>
+                            </div>
+                            <div className="bg-slate-900 p-6 rounded-[2.5rem] text-white flex flex-col gap-3">
+                                <button onClick={() => setIsSwitchOn(!isSwitchOn)} className={`py-4 rounded-xl font-black ${isSwitchOn ? 'bg-emerald-600' : 'bg-emerald-500'}`}>{isSwitchOn ? 'MỞ CÔNG TẮC' : 'ĐÓNG CÔNG TẮC'}</button>
+                                <button onClick={() => setIsSaltBridgeIn(!isSaltBridgeIn)} className="py-4 rounded-xl font-black bg-indigo-600">{isSaltBridgeIn ? 'RÚT CẦU MUỐI' : 'NHÚNG CẦU MUỐI'}</button>
+                                <button onClick={handleReset} className="py-4 rounded-xl font-black bg-slate-800 border border-slate-700">RESET</button>
+                            </div>
+                        </div>
+
+                        {/* Mô phỏng chính */}
+                        <div className="lg:col-span-2 bg-white rounded-[3rem] shadow-2xl p-8 relative min-h-[600px] flex flex-col border border-slate-200">
+                            <Circuit isSwitchOn={isSwitchOn} isSaltBridgeIn={isSaltBridgeIn} isGlowing={isGlowing} />
+                            <div className="flex-1 flex justify-around items-end pb-8">
+                                <Beaker metal="Zn" solution="ZnSO4" color="bg-sky-50" metalColor="bg-slate-400" mass={znMass} isActive={isGlowing} />
+                                <Beaker metal="Cu" solution="CuSO4" color="bg-blue-600" metalColor="bg-orange-700" mass={cuMass} isActive={isGlowing} />
+                            </div>
+                        </div>
+
+                        {/* Cơ chế phản ứng */}
+                        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border-l-8 border-indigo-600">
+                            <h3 className="font-black text-xl mb-8">🧪 Cơ chế phản ứng</h3>
+                            <div className="space-y-8">
+                                <section className="pl-4 border-l-2 border-slate-100">
+                                    <h4 className="font-black text-sm uppercase mb-2">Anode (Cực Âm)</h4>
+                                    <div className="bg-slate-50 p-4 rounded-xl font-mono font-bold text-indigo-700">QT[O]: Zn⁰ &rarr; Zn²⁺ + 2e</div>
+                                </section>
+                                <section className="pl-4 border-l-2 border-slate-100">
+                                    <h4 className="font-black text-sm uppercase mb-2">Cathode (Cực Dương)</h4>
+                                    <div className="bg-orange-50 p-4 rounded-xl font-mono font-bold text-orange-700">QT[K]: Cu²⁺ + 2e &rarr; Cu⁰</div>
+                                </section>
+                                <div className="mt-8 p-4 bg-slate-900 rounded-2xl text-white text-center">
+                                    <h4 className="text-[10px] text-indigo-400 uppercase tracking-widest mb-2">Sơ đồ pin</h4>
+                                    <div className="text-[10px] font-mono tracking-tighter leading-loose">
+                                        (-) Zn<sub>(s)</sub> | Zn<sup>2+</sup><sub>(aq)</sub> || Cu<sup>2+</sup><sub>(aq)</sub> | Cu<sub>(s)</sub> (+)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer Insight */}
+                    <footer className="mt-20 text-slate-400 text-sm font-black tracking-[0.4em] uppercase text-center pb-16">
+                        Giáo cụ trực quan • Hóa học 12
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
